@@ -30,7 +30,7 @@ def _get_code(name):
 
 def _api_query(**query):
     api = skc.FlightsCache(SETTINGS['api']['api_key'])
-    kwargs = dict( SETTINGS['query'].items() + query.items() )
+    kwargs = dict( SETTINGS['defautls'].items() + query.items() )
     return api.get_cheapest_quotes(**kwargs).parsed
 
 def _get_dates():
