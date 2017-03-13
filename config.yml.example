@@ -1,0 +1,28 @@
+api:
+    api_key: "YOUR_API_KEY"
+    verbose: false
+    limit_per_minute: 300
+
+defaults:
+    market   : "NL"
+    currency : "EUR"
+    locale   : "pt-BR"
+
+weekends:
+    place_from:
+      - "Amsterdam"
+    place_to: 
+      - "Dublin"
+      - "Lisbon"
+      - "Rome"
+    flying_day: 
+      - "Thursday"
+      - "Friday"
+      - "Saturday"
+    length: 
+      - 3
+      - 4
+    days_begin: 14
+    days_end: 120
+    direct: True
+
