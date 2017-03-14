@@ -32,8 +32,10 @@ def _api_live_query(**query):
     api = skc.Flights(SETTINGS['api']['api_key'])
     kwargs  = dict( SETTINGS['defaults'].items() + query.items() )
     results = api.get_result(**kwargs).parsed
-    prices  = [  r['PricingOptions'][0] for r in results['Itineraries'] ]
-    return prices
+    if results:
+        prices  = [  r['PricingOptions'][0] for r in results['Itineraries'] ]
+        return prices
+    return []
 
 def _api_cache_query(**query):
     api = skc.FlightsCache(SETTINGS['api']['api_key'])
@@ -64,17 +66,21 @@ def _get_places():
             destinations += [ (_from_iata, _to_iata ) ]
     return destinations
 
-def _get_best_price(d, p, only_direct=False, live=True):
-    params = dict(originplace=p[0], destinationplace=p[1], outbounddate=d[0], 
-            inbounddate=d[1], locationschema='Iata', adults=2, stops=0)
-    if live:
+def _get_best_price(d, p, only_direct=False):
+    params = dict(originplace=p[0], destinationplace=p[1], outbounddate=d[0], inbounddate=d[1], locationschema='Iata', adults=2)
+    if only_direct: params['stops'] = 0
+
+    if CRITERIA['api']['live_api']:
         results = _api_live_query(**params)
-        best    = results[0]['Price']
+        param   = 'Price'
     else:
         results = _api_cache_query(**params) 
-        best    = results[0]['MinPrice']
+        param   = 'MinPrice'
 
-    return best
+    if results:
+        return results[0][param]
+
+    return None
 
 
 # execution
