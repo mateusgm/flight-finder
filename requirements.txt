@@ -1,4 +1,3 @@
-GeoBases
 PyYAML
 skyscanner
 pandas

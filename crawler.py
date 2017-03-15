@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 
+import yaml
+import sys
 import time
 import calendar
+
 import datetime as dt
 import numpy as np
 import pandas as pd
 import skyscanner.skyscanner as skc
-import yaml
-import sys
 
-from GeoBases import *
 from collections import defaultdict
-from operator import attrgetter
+from operator import itemgetter
 
 pd.set_option('display.width', 500)
 pd.set_option('display.max_rows', 1000)
@@ -22,30 +22,39 @@ pd.set_option('display.max_rows', 1000)
 def _add_days(date, days):
     return date + dt.timedelta(days=days)
 
-geo = GeoBase(data='ori_por', verbose=False)
-def _get_place(name):
-    ids  = geo.fuzzyFind(name, 'city_name_utf')
-    objs = [ geo.get(i) for _, i in ids if geo.get(i)['fcode'] == 'AIRP' ]
-    return objs[0]
 
-def _api_live_query(**query):
-    api = skc.Flights(SETTINGS['api']['api_key'])
-    kwargs  = dict( SETTINGS['defaults'].items() + query.items() )
-    results = api.get_result(**kwargs).parsed
-    if results:
-        prices  = [  r['PricingOptions'][0] for r in results['Itineraries'] ]
-        return prices
-    return []
+# api
 
-def _api_cache_query(**query):
-    api = skc.FlightsCache(SETTINGS['api']['api_key'])
-    kwargs  = dict( SETTINGS['defaults'].items() + query.items() )
-    results = api.get_cheapest_quotes(**kwargs).parsed
-    if query['stops'] == 0: results = [ r for r in results if r['Direct'] ]
-    results = sorted(results, key=attrgetter('MinPrice'))
+def _query(module, method, params):
+    api     = module(SETTINGS['api']['api_key'])
+    kwargs  = dict( SETTINGS['defaults'].items() + params.items() )
+    results = getattr(api, method)(**kwargs)
+    return results.parsed
+
+def api_get_place(name):
+    results = _query(skc.Transport, 'location_autosuggest', { 'query': name })
+    return results['Places'][0]['PlaceId']
+
+def api_live_query(**query):
+    time.sleep(3)
+    results = _query(skc.Flights, 'get_result', query)
+    if results is None: return []
+
+    prices  = [  r['PricingOptions'][0] for r in results['Itineraries'] ]
+    return prices
+
+def api_cache_query(**query):
+    results = _query(skc.FlightsCache, 'get_cheapest_quotes', query)
+    if results is None: return []
+
+    results = [ r for r in results['Quotes'] if query['stops'] > 0 or r['Direct'] ]
+    results = sorted(results, key=itemgetter('MinPrice'))
     return results
 
-def _get_dates():
+
+# assembling the grid
+
+def get_dates():
     dates   = []
     current = _add_days(dt.datetime.today(), CRITERIA['days_begin'])
     ending  = _add_days(dt.datetime.today(), CRITERIA['days_end'])
@@ -56,25 +65,25 @@ def _get_dates():
         current = _add_days(current, 1)
     return dates
 
-def _get_places():
+def get_places():
     destinations = []
     for _from in CRITERIA[ 'place_from' ]:
-        _from_iata = _get_place(_from)['iata_code']
+        _from_iata = api_get_place(_from)
         for _to in CRITERIA[ 'place_to' ]:
-            _to_iata = _get_place(_to)['iata_code']
+            _to_iata = api_get_place(_to)
             print "IATA:", _to, _to_iata
             destinations += [ (_from_iata, _to_iata ) ]
     return destinations
 
-def _get_best_price(d, p, only_direct=False):
-    params = dict(originplace=p[0], destinationplace=p[1], outbounddate=d[0], inbounddate=d[1], locationschema='Iata', adults=2)
+def get_best_price(d, p, only_direct=False):
+    params = dict(originplace=p[0], destinationplace=p[1], outbounddate=d[0], inbounddate=d[1], locationschema='Sky', adults=2)
     if only_direct: params['stops'] = 0
 
-    if CRITERIA['api']['live_api']:
-        results = _api_live_query(**params)
+    if SETTINGS['api']['live_api']:
+        results = api_live_query(**params)
         param   = 'Price'
     else:
-        results = _api_cache_query(**params) 
+        results = api_cache_query(**params) 
         param   = 'MinPrice'
 
     if results:
@@ -89,8 +98,8 @@ with open('config.yml') as f:
     SETTINGS = yaml.safe_load(f)
     CRITERIA = SETTINGS[ sys.argv[1] ]
 
-dates  = _get_dates()
-places = _get_places()
+dates  = get_dates()
+places = get_places()
 print "%d destinations x %d days" % (len(places), len(dates)) 
 
 grid = pd.DataFrame(
@@ -98,11 +107,10 @@ grid = pd.DataFrame(
     columns=[ 'Takeoff', 'Return' ] + CRITERIA['place_to'] )
 
 for i,d in enumerate(dates):
-    prices = [ _get_best_price(d, p, only_direct=CRITERIA['direct']) for p in places ]
+    prices = [ get_best_price(d, p, only_direct=CRITERIA['direct']) for p in places ]
     grid.ix[i] = [ d[0], d[1] ] + prices
 
     if (i+1) % 5 == 0: print "%d combinations" % ((i+1) * len(places))
-    # time.sleep( float(SETTINGS['api']['limit_per_minute']) / len(places))
 
 print grid
 
