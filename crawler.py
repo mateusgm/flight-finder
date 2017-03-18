@@ -4,6 +4,7 @@ import yaml
 import sys
 import time
 import calendar
+import logging
 
 import datetime as dt
 import numpy as np
@@ -137,6 +138,7 @@ with open('config.yml') as f:
     CRITERIA = SETTINGS[ sys.argv[1] ]
     CRITERIA['length'] = np.array(CRITERIA['length'])
 
+logging.getLogger('skyscanner.skyscanner').setLevel(logging.ERROR)
 
 # plan
 
