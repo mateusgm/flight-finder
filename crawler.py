@@ -28,24 +28,28 @@ def _add_days(date, days):
 def _query(module, method, params):
     api     = module(SETTINGS['api']['api_key'])
     kwargs  = dict( SETTINGS['defaults'].items() + params.items() )
-    results = getattr(api, method)(**kwargs)
-    return results.parsed
+    try:
+        results = getattr(api, method)(**kwargs)
+        return results.parsed
+    except:
+        return None
 
 def api_get_place(name):
     results = _query(skc.Transport, 'location_autosuggest', { 'query': name })
+    if results is None: return None
     return results['Places'][0]['PlaceId']
 
 def api_live_query(**query):
     time.sleep(SETTINGS['api']['live_sleep'])
     results = _query(skc.Flights, 'get_result', query)
-    if results is None: return []
+    if results is None: return None
 
     prices  = [  r['PricingOptions'][0] for r in results['Itineraries'] ]
     return prices
 
 def api_cache_query(**query):
     results = _query(skc.FlightsCache, 'get_cheapest_quotes', query)
-    if results is None: return []
+    if results is None: return None
 
     results = [ r for r in results['Quotes'] if query['stops'] > 0 or r['Direct'] ]
     results = sorted(results, key=itemgetter('MinPrice'))
@@ -61,10 +65,11 @@ def _get_flight_times(checkin, los, **flight_times):
         inbounddate=_add_days(checkin, los).strftime('%Y-%m-%d'),
         adults=2 )
 
-    for f in [ 'inbound', 'outbound' ]:
-        for p in [ 'start', 'end' ]:
-            if p in SETTINGS['defaults'][ flight_times[f] ]:
-                flight["%sdepart%stime" % (f,p)] = SETTINGS['defaults'][ flight_times[f] ][p]
+    if CRITERIA['smart_time']:
+        for f in [ 'inbound', 'outbound' ]:
+            for p in [ 'start', 'end' ]:
+                if p in SETTINGS['defaults'][ flight_times[f] ]:
+                    flight["%sdepart%stime" % (f,p)] = SETTINGS['defaults'][ flight_times[f] ][p]
 
     return flight
 
@@ -79,7 +84,8 @@ def get_dates():
         previous = _add_days(current, -1)
         if calendar.day_name[ current.weekday() ] in CRITERIA['flying_day']:
             dates += _generate_stays( current,  CRITERIA['length'], outbound="morning", inbound="afternoon" )
-            dates += _generate_stays( previous, CRITERIA['length'] + 1, outbound="evening", inbound="afternoon" )
+            if CRITERIA['smart_time']:
+                dates += _generate_stays( previous, CRITERIA['length'] + 1, outbound="evening", inbound="afternoon" )
         current = _add_days(current, 1)
     return dates
 
@@ -124,13 +130,11 @@ print "%d destinations x %d days" % (len(places), len(dates))
 
 grid = pd.DataFrame(
     index=range(len(dates)),
-    columns=[ 'Takeoff', 'Return' ] + CRITERIA['place_to'] )
+    columns=[ 'Outbound', 'Time', 'Los' ] + CRITERIA['place_to'] )
 
 for i,d in enumerate(dates):
     prices = [ get_best_price(d, p, only_direct=CRITERIA['direct']) for p in places ]
-    grid.ix[i] = [ "%s_%s" % ( d['outbounddate'], d['_ref']['in_period'] ), d['_ref']['los'] ] + prices
-    print grid.ix[i]
-
+    grid.ix[i] = [ d['outbounddate'], d['_ref']['out_period'].upper(), d['_ref']['los'] ] + prices
     if (i+1) % 5 == 0: print "%d combinations" % ((i+1) * len(places))
 
 print grid
