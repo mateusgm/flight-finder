@@ -22,6 +22,19 @@ pd.set_option('display.max_rows', 1000)
 def _add_days(date, days):
     return date + dt.timedelta(days=days)
 
+begin       = time.time()
+next_report = .05
+
+def _print_progress(partial, total):
+    global next_report
+    if float(partial) / total > next_report:
+        throughput   = float(time.time() - begin)/total
+        next_report += .05
+        print "\n%d / %d done (%.2f/s ~ %dm to go)" % (partial, total, throughput, throughput*(total-partial)/60 )
+    else:
+        sys.stdout.write(".")
+        sys.stdout.flush()
+
 
 # api
 
@@ -117,25 +130,34 @@ def get_best_price(dates, places, only_direct=False):
     return None
 
 
-# execution
+# init
 
 with open('config.yml') as f:
     SETTINGS = yaml.safe_load(f)
     CRITERIA = SETTINGS[ sys.argv[1] ]
     CRITERIA['length'] = np.array(CRITERIA['length'])
 
+
+# plan
+
 dates  = get_dates()
 places = get_places()
-print "%d destinations x %d days" % (len(places), len(dates)) 
+total  = len(places) * len(dates)
+print "%d combinations: %dp x %dd" % (total, len(places), len(dates)) 
 
 grid = pd.DataFrame(
     index=range(len(dates)),
     columns=[ 'Outbound', 'Time', 'Los' ] + CRITERIA['place_to'] )
 
+
+# crawl
+
 for i,d in enumerate(dates):
-    prices = [ get_best_price(d, p, only_direct=CRITERIA['direct']) for p in places ]
+    prices = []
+    for j, p in enumerate(places):
+        prices += [ get_best_price(d, p, only_direct=CRITERIA['direct']) ]
+        _print_progress(i*len(places) + j, total)
     grid.ix[i] = [ d['outbounddate'], d['_ref']['out_period'].upper(), d['_ref']['los'] ] + prices
-    if (i+1) % 5 == 0: print "%d combinations" % ((i+1) * len(places))
 
 print grid
 
