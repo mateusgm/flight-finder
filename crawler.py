@@ -36,7 +36,7 @@ def api_get_place(name):
     return results['Places'][0]['PlaceId']
 
 def api_live_query(**query):
-    time.sleep(3)
+    time.sleep(SETTINGS['api']['live_sleep'])
     results = _query(skc.Flights, 'get_result', query)
     if results is None: return []
 
@@ -54,14 +54,32 @@ def api_cache_query(**query):
 
 # assembling the grid
 
+def _get_flight_times(checkin, los, **flight_times):
+    flight = dict(
+        _ref=dict( los=los, in_period=flight_times['inbound'][0], out_period=flight_times['outbound'][0] ),
+        outbounddate=checkin.strftime('%Y-%m-%d'), 
+        inbounddate=_add_days(checkin, los).strftime('%Y-%m-%d'),
+        adults=2 )
+
+    for f in [ 'inbound', 'outbound' ]:
+        for p in [ 'start', 'end' ]:
+            if p in SETTINGS['defaults'][ flight_times[f] ]:
+                flight["%sdepart%stime" % (f,p)] = SETTINGS['defaults'][ flight_times[f] ][p]
+
+    return flight
+
+def _generate_stays(checkin, loss, **flight_times):
+    return [ _get_flight_times(checkin, l, **flight_times) for l in loss ]
+
 def get_dates():
     dates   = []
     current = _add_days(dt.datetime.today(), CRITERIA['days_begin'])
     ending  = _add_days(dt.datetime.today(), CRITERIA['days_end'])
     while current < ending:
+        previous = _add_days(current, -1)
         if calendar.day_name[ current.weekday() ] in CRITERIA['flying_day']:
-            for l in CRITERIA['length']:
-                dates += [ (current.strftime('%Y-%m-%d'), _add_days(current, l-1).strftime('%Y-%m-%d') ) ]
+            dates += _generate_stays( current,  CRITERIA['length'], outbound="morning", inbound="afternoon" )
+            dates += _generate_stays( previous, CRITERIA['length'] + 1, outbound="evening", inbound="afternoon" )
         current = _add_days(current, 1)
     return dates
 
@@ -75,8 +93,9 @@ def get_places():
             destinations += [ (_from_iata, _to_iata ) ]
     return destinations
 
-def get_best_price(d, p, only_direct=False):
-    params = dict(originplace=p[0], destinationplace=p[1], outbounddate=d[0], inbounddate=d[1], locationschema='Sky', adults=2)
+def get_best_price(dates, places, only_direct=False):
+    location = dict(originplace=places[0], destinationplace=places[1], locationschema='Sky')
+    params   = dict(location.items() + dates.items())
     if only_direct: params['stops'] = 0
 
     if SETTINGS['api']['live_api']:
@@ -97,6 +116,7 @@ def get_best_price(d, p, only_direct=False):
 with open('config.yml') as f:
     SETTINGS = yaml.safe_load(f)
     CRITERIA = SETTINGS[ sys.argv[1] ]
+    CRITERIA['length'] = np.array(CRITERIA['length'])
 
 dates  = get_dates()
 places = get_places()
@@ -108,7 +128,8 @@ grid = pd.DataFrame(
 
 for i,d in enumerate(dates):
     prices = [ get_best_price(d, p, only_direct=CRITERIA['direct']) for p in places ]
-    grid.ix[i] = [ d[0], d[1] ] + prices
+    grid.ix[i] = [ "%s_%s" % ( d['outbounddate'], d['_ref']['in_period'] ), d['_ref']['los'] ] + prices
+    print grid.ix[i]
 
     if (i+1) % 5 == 0: print "%d combinations" % ((i+1) * len(places))
 

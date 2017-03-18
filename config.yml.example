@@ -1,28 +1,37 @@
 api:
-    api_key: "YOUR_API_KEY"
-    verbose: false
-    limit_per_minute: 300
+  api_key: "SKYSCANNER API"
+  verbose: true
+  limit_per_minute: 300
+  live_sleep: 1
+  live_api: true
 
 defaults:
-    market   : "NL"
-    currency : "EUR"
-    locale   : "pt-BR"
+  market   : "NL"
+  country  : "NL"
+  currency : "EUR"
+  locale   : "pt-BR"
+  evening  :
+    start: "17:00"
+  afternoon:
+    start: "12:00"
+    end: "17:00"
+  morning:
+    end: "12:00"
 
-weekends:
-    place_from:
-      - "Amsterdam"
-    place_to: 
-      - "Dublin"
-      - "Lisbon"
-      - "Rome"
-    flying_day: 
-      - "Thursday"
-      - "Friday"
-      - "Saturday"
-    length: 
-      - 3
-      - 4
-    days_begin: 14
-    days_end: 120
-    direct: True
-
+portugal:
+  place_from:
+    - "Amsterdam"
+  place_to  : 
+    - "Lisbon"
+    - "Porto"
+    - "Faro"
+  flying_day: 
+    - "Thursday"
+    - "Friday"
+    - "Saturday"
+  length: 
+    - 3
+    - 4
+  days_begin: 14
+  days_end  : 30
+  direct    : True
