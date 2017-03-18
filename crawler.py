@@ -14,9 +14,6 @@ import skyscanner.skyscanner as skc
 from collections import defaultdict
 from operator import itemgetter
 
-pd.set_option('display.width', 500)
-pd.set_option('display.max_rows', 1000)
-
 
 # helpers
 
@@ -24,17 +21,12 @@ def _add_days(date, days):
     return date + dt.timedelta(days=days)
 
 begin       = time.time()
-next_report = .05
 
 def _print_progress(partial, total):
-    global next_report
-    if float(partial) / total > next_report:
-        throughput   = float(time.time() - begin)/total
-        next_report += .05
-        print "\n%d / %d done (%.2f/s ~ %dm to go)" % (partial, total, throughput, throughput*(total-partial)/60 )
-    else:
-        sys.stdout.write(".")
-        sys.stdout.flush()
+    elapsed      = (time.time() - begin) / 60.0
+    throughput   = partial / elapsed
+    sys.stdout.write("\r..  %d / %d  |  %.1fm / ~%dm  |  %.1f/m  " % (partial, total, elapsed, total/throughput, throughput ))
+    sys.stdout.flush()
 
 
 # api
@@ -139,6 +131,8 @@ with open('config.yml') as f:
     CRITERIA['length'] = np.array(CRITERIA['length'])
 
 logging.getLogger('skyscanner.skyscanner').setLevel(logging.ERROR)
+pd.set_option('display.width', 500)
+pd.set_option('display.max_rows', 1000)
 
 # plan
 
@@ -158,7 +152,7 @@ for i,d in enumerate(dates):
     prices = []
     for j, p in enumerate(places):
         prices += [ get_best_price(d, p, only_direct=CRITERIA['direct']) ]
-        _print_progress(i*len(places) + j, total)
+        _print_progress(i*len(places)+j+1, total)
     grid.ix[i] = [ d['outbounddate'], d['_ref']['out_period'].upper(), d['_ref']['los'] ] + prices
 
 print grid
